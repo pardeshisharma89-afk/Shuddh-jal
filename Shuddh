@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Hydra Bottles — Buy Reusable Water Bottles</title>
+  <meta name="description" content="Buy quality reusable water bottles. Simple demo e-commerce site." />
+  <style>
+    :root{
+      --bg:#f6f7fb; --card:#fff; --accent:#0ea5a4; --muted:#6b7280;
+      --radius:12px; --shadow: 0 6px 18px rgba(16,24,40,0.06);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    body{ margin:0; background:var(--bg); color:#0f172a; }
+    .container{ max-width:1100px; margin:36px auto; padding:18px; }
+    header{ display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:18px; }
+    .brand{ display:flex; gap:12px; align-items:center; }
+    .logo{ width:52px; height:52px; border-radius:10px; background:linear-gradient(135deg,#7dd3fc,#0ea5a4); display:flex; align-items:center; justify-content:center; color:white; font-weight:700; font-size:18px; box-shadow:var(--shadow); }
+    h1{ margin:0; font-size:20px; }
+    nav{ display:flex; gap:10px; align-items:center; }
+    button{ background:var(--accent); color:#fff; border:0; padding:8px 12px; border-radius:10px; cursor:pointer; box-shadow:var(--shadow); }
+    .grid{ display:grid; grid-template-columns: repeat(auto-fit,minmax(240px,1fr)); gap:18px; }
+    .card{ background:var(--card); border-radius:var(--radius); padding:14px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:12px; }
+    .card img{ width:100%; height:180px; object-fit:cover; border-radius:10px; }
+    .price{ font-weight:700; font-size:18px; }
+    .muted{ color:var(--muted); font-size:13px; }
+    .footer{ margin-top:22px; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+    .cart-btn{ position:relative; }
+    .cart-count{ position:absolute; right:-8px; top:-10px; background:#ef4444; color:white; font-size:12px; padding:2px 6px; border-radius:999px; }
+    /* cart drawer */
+    .drawer{ position:fixed; right:18px; top:80px; width:360px; max-width:92%; background:var(--card); border-radius:12px; padding:12px; box-shadow:0 20px 40px rgba(2,6,23,0.15); transform-origin:right top; transition:transform .18s ease, opacity .18s ease; opacity:0; transform:scale(.98) translateY(-6px); pointer-events:none; z-index:60; }
+    .drawer.open{ opacity:1; transform:none; pointer-events:auto; }
+    .item-row{ display:flex; gap:10px; align-items:center; }
+    .qty{ display:flex; gap:6px; align-items:center; }
+    .small{ font-size:13px; color:var(--muted); }
+    .checkout{ margin-top:12px; }
+    .center{ text-align:center; }
+    /* responsive */
+    @media (max-width:520px){ header{ flex-direction:column; align-items:flex-start; gap:8px } .logo{ width:44px; height:44px; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="app">
+    <header>
+      <div class="brand">
+        <div class="logo">HB</div>
+        <div>
+          <h1>Hydra Bottles</h1>
+          <div class="small">Reusable | BPA-free | Free shipping over ₹799</div>
+        </div>
+      </div>
+      <nav>
+        <div class="muted">Secure HTTPS-ready demo</div>
+        <div style="width:10px"></div>
+        <button id="openCart" class="cart-btn">Cart <span id="cartCount" class="cart-count">0</span></button>
+      </nav>
+    </header>
+
+    <main>
+      <section>
+        <h2 style="margin-top:0">Products</h2>
+        <div class="grid" id="productsGrid"></div>
+      </section>
+
+      <div class="footer">
+        <div class="muted">Demo store • Paste this file in a repo and enable GitHub Pages to get HTTPS automatically.</div>
+        <div>
+          <button id="clearCartBtn" style="background:#ef4444">Clear Cart</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- cart drawer -->
+  <aside id="cartDrawer" class="drawer" aria-hidden="true">
+    <h3>Your cart</h3>
+    <div id="cartList"></div>
+    <div id="cartEmpty" class="muted center" style="display:none; padding:18px 0">Your cart is empty.</div>
+
+    <div style="display:flex; justify-content:space-between; margin-top:12px; align-items:center">
+      <div class="small">Subtotal</div>
+      <div id="subtotal" style="font-weight:700">₹0</div>
+    </div>
+
+    <div class="checkout">
+      <button id="checkoutBtn" style="width:100%">Checkout</button>
+      <div class="small muted center" style="margin-top:8px">You can use the offline checkout or connect Stripe (see comments).</div>
+    </div>
+    <div style="margin-top:8px; display:flex; gap:8px">
+      <button id="closeCart" style="flex:1; background:#e6eaf0; color:#0f172a">Close</button>
+      <button id="downloadInvoice" style="flex:1; background:#f3f4f6; color:#0f172a">Download Invoice</button>
+    </div>
+  </aside>
+
+  <!-- modals -->
+  <div id="modal" style="display:none; position:fixed; inset:0; background:rgba(2,6,23,0.5); align-items:center; justify-content:center; z-index:120">
+    <div style="background:white; max-width:720px; width:94%; border-radius:12px; padding:18px;">
+      <div id="modalContent"></div>
+      <div style="text-align:right; margin-top:12px"><button id="closeModal">Close</button></div>
+    </div>
+  </div>
+
+<script>
+/*
+  Simple static e-commerce frontend.
+  - Edit `PRODUCTS` to change inventory.
+  - To enable Stripe Checkout, set:
+      const STRIPE_PUBLISHABLE_KEY = 'pk_live_...'
+      const CREATE_CHECKOUT_SESSION_URL = 'https://your-server.example.com/create-checkout-session'
+    The frontend will POST {items} to CREATE_CHECKOUT_SESSION_URL and expect {sessionId}.
+    See Node/Express snippet provided after this file for server code.
+*/
+
+const PRODUCTS = [
+  {
+    id: 'wb-stainless-500',
+    title: 'Hydra Stainless Steel 500ml',
+    price: 599,
+    desc: 'Double-wall vacuum insulated. Keeps water cold 24h, hot 12h.',
+    img: 'https://images.unsplash.com/photo-1526406915891-6f4f24cfdca4?q=80&w=1200&auto=format&fit=crop&ixlib=rb-4.0.3&s=1b8b7ab22b7d8b1b6b8a95c3b881c0b9'
+  },
+  {
+    id: 'wb-stainless-750',
+    title: 'Hydra Stainless Steel 750ml',
+    price: 749,
+    desc: 'Larger 750ml capacity, leakproof cap.',
+    img: 'https://images.unsplash.com/photo-1582719478176-2c3bde65f6b3?q=80&w=1200&auto=format&fit=crop&ixlib=rb-4.0.3&s=6f0a4c1c1aa7a298e0b3f6d3b9f85a2f'
+  },
+  {
+    id: 'wb-sport-650',
+    title: 'Hydra Sport 650ml',
+    price: 499,
+    desc: 'Lightweight sport bottle with flip-top.',
+    img: 'https://images.unsplash.com/photo-1544025162-d76694265947?q=80&w=1200&auto=format&fit=crop&ixlib=rb-4.0.3&s=07a4f871b2dc7b1b6c6d9f4fbecb5a0d'
+  }
+];
+
+// ----- CONFIG for payments (leave blank for offline mode) -----
+const STRIPE_PUBLISHABLE_KEY = ''; // e.g. 'pk_test_...'
+const CREATE_CHECKOUT_SESSION_URL = ''; // e.g. 'https://your-server.example.com/create-checkout-session'
+// --------------------------------------------------------------
+
+/* Utilities */
+const $ = sel => document.querySelector(sel);
+const formatINR = num => '₹' + Number(num).toLocaleString('en-IN');
+
+let cart = JSON.parse(localStorage.getItem('hb_cart') || '[]');
+
+// render products
+function renderProducts(){
+  const grid = $('#productsGrid');
+  grid.innerHTML = '';
+  PRODUCTS.forEach(p=>{
+    const card = document.createElement('div'); card.className='card';
+    card.innerHTML = `
+      <img src="${p.img}" alt="${p.title}">
+      <div style="display:flex; justify-content:space-between; align-items:center">
+        <div>
+          <div style="font-weight:700">${p.title}</div>
+          <div class="small muted">${p.desc}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="price">${formatINR(p.price)}</div>
+          <div class="small muted">incl. GST</div>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:6px;">
+        <button data-add="${p.id}" style="flex:1">Add to cart</button>
+        <button data-buy="${p.id}" style="flex:1; background:#111; color:white">Buy now</button>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+  // event delegation for add/buy
+  grid.onclick = (e)=>{
+    const addId = e.target.getAttribute('data-add');
+    const buyId = e.target.getAttribute('data-buy');
+    if(addId) addToCart(addId);
+    if(buyId) {
+      addToCart(buyId);
+      openCart();
+    }
+  };
+}
+
+// cart functions
+function saveCart(){
+  localStorage.setItem('hb_cart', JSON.stringify(cart));
+  updateCartCount();
+}
+
+function updateCartCount(){
+  const count = cart.reduce((s,it)=>s+it.qty,0);
+  $('#cartCount').textContent = count;
+}
+
+function addToCart(id, qty=1){
+  const prod = PRODUCTS.find(p=>p.id===id);
+  if(!prod) return alert('Product not found.');
+  const existing = cart.find(c=>c.id===id);
+  if(existing) existing.qty += qty;
+  else cart.push({ id, qty });
+  saveCart();
+  flashToast('Added to cart');
+}
+
+function setQty(id, qty){
+  if(qty<=0) cart = cart.filter(i=>i.id!==id);
+  else cart = cart.map(i=> i.id===id ? {...i, qty} : i);
+  saveCart();
+  renderCart();
+}
+
+function clearCart(){
+  cart = [];
+  saveCart();
+  renderCart();
+  flashToast('Cart cleared');
+}
+
+function getCartDetails(){
+  return cart.map(item=>{
+    const p = PRODUCTS.find(pp=>pp.id===item.id);
+    return {
+      ...p,
+      qty: item.qty,
+      lineTotal: p.price * item.qty
+    };
+  });
+}
+
+function subtotal(){
+  return getCartDetails().reduce((s,i)=>s + i.lineTotal, 0);
+}
+
+// render cart drawer
+function renderCart(){
+  const drawer = $('#cartDrawer');
+  const list = $('#cartList');
+  const cartEmpty = $('#cartEmpty');
+  const items = getCartDetails();
+  list.innerHTML = '';
+  if(items.length===0){
+    cartEmpty.style.display='block';
+  } else {
+    cartEmpty.style.display='none';
+    items.forEach(it=>{
+      const row = document.createElement('div'); row.style.padding='8px 0';
+      row.innerHTML = `
+        <div class="item-row">
+          <img src="${it.img}" alt="${it.title}" style="width:68px;height:48px;object-fit:cover;border-radius:8px">
+          <div style="flex:1">
+            <div style="font-weight:700">${it.title}</div>
+            <div class="small muted">${formatINR(it.price)} × ${it.qty} = <strong>${formatINR(it.lineTotal)}</strong></div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+            <div class="qty">
+              <button data-dec="${it.id}">−</button>
+              <div style="padding:4px 8px;border-radius:8px;background:#f3f4f6">${it.qty}</div>
+              <button data-inc="${it.id}">+</button>
+            </div>
+            <button data-remove="${it.id}" style="background:#fee2e2;color:#b91c1c;border-radius:8px;padding:6px;border:0">Remove</button>
+          </div>
+        </div>
+      `;
+      list.appendChild(row);
+    });
+  }
+  $('#subtotal').textContent = formatINR(subtotal());
+  updateCartCount();
+}
+
+// open/close cart
+function openCart(){ 
+  const d = $('#cartDrawer'); d.classList.add('open'); d.setAttribute('aria-hidden','false');
+}
+function closeCart(){ 
+  const d = $('#cartDrawer'); d.classList.remove('open'); d.setAttribute('aria-hidden','true');
+}
+
+// checkout flow
+async function checkout(){
+  if(cart.length===0) return alert('Cart is empty');
+  // If Stripe keys are provided, try to create a Checkout session
+  if(STRIPE_PUBLISHABLE_KEY && CREATE_CHECKOUT_SESSION_URL){
+    try{
+      // prepare items payload
+      const payload = { items: getCartDetails().map(i=>({ id:i.id, title:i.title, qty:i.qty, unit_price:i.price })) };
+      const res = await fetch(CREATE_CHECKOUT_SESSION_URL, {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if(!res.ok) throw new Error('Payment server error: '+res.status);
+      const data = await res.json();
+      if(!data.sessionId) throw new Error('No session id returned from server.');
+      // load stripe and redirect
+      const stripeJs = await loadScript('https://js.stripe.com/v3/');
+      const stripe = Stripe(STRIPE_PUBLISHABLE_KEY);
+      const { error } = await stripe.redirectToCheckout({ sessionId: data.sessionId });
+      if(error) throw error;
+    }catch(err){
+      showModal('<h3>Payment error</h3><pre style="white-space:pre-wrap;">'+err.message+'</pre>');
+    }
+    return;
+  }
+
+  // Offline fallback: show order summary and instructions
+  const details = getCartDetails();
+  const summary = details.map(d=> `${d.title} × ${d.qty} — ${formatINR(d.lineTotal)}`).join('<br>');
+  const total = formatINR(subtotal());
+  const html = `
+    <h3>Offline Checkout</h3>
+    <div class="small muted">This demo site does not have card processing enabled. You can use the instructions below to accept payment offline or configure Stripe (see comments in the file).</div>
+    <div style="margin-top:12px">
+      ${summary}
+      <hr>
+      <div style="font-weight:700">Total: ${total}</div>
+      <div style="margin-top:12px">
+        <p><strong>Options to accept payment:</strong></p>
+        <ol>
+          <li>UPI / Bank transfer — Ask customer to transfer and collect UPI txn ID.</li>
+          <li>Cash on delivery (COD) — collect phone & address and arrange delivery.</li>
+          <li>Connect Stripe / PayPal — use the server snippet provided to enable card payments.</li>
+        </ol>
+      </div>
+      <div style="margin-top:8px">
+        <button id="confirmOrderBtn">Confirm order (simulate)</button>
+      </div>
+    </div>
+  `;
+  showModal(html);
+
+  // handle confirmation
+  document.getElementById('confirmOrderBtn').onclick = ()=>{
+    const orderId = 'HB' + Date.now().toString().slice(-6);
+    closeModal();
+    clearCart();
+    showModal(`<h3>Order placed</h3><p>Your order <strong>${orderId}</strong> has been recorded (simulation). Share this ID with the buyer and collect payment offline.</p>`);
+  };
+}
+
+function flashToast(msg){
+  const el = document.createElement('div');
+  el.textContent = msg;
+  Object.assign(el.style, { position:'fixed', left:'50%', transform:'translateX(-50%)', bottom:'36px', background:'#111', color:'white', padding:'10px 14px', borderRadius:'8px', zIndex:200});
+  document.body.appendChild(el);
+  setTimeout(()=> el.style.opacity='0.0',1400);
+  setTimeout(()=> el.remove(),1800);
+}
+
+function showModal(html){
+  $('#modalContent').innerHTML = html;
+  $('#modal').style.display = 'flex';
+}
+function closeModal(){
+  $('#modal').style.display = 'none';
+}
+
+function loadScript(src){ return new Promise((res, rej)=>{
+  const s = document.createElement('script'); s.src = src; s.onload = ()=>res(true); s.onerror = ()=>rej(new Error('Failed to load '+src)); document.head.appendChild(s);
+});}
+
+// invoice download (simple text)
+function downloadInvoice(){
+  if(cart.length===0) return alert('Cart is empty');
+  const details = getCartDetails();
+  const lines = details.map(d=> `${d.title} x ${d.qty} — ${formatINR(d.lineTotal)}`);
+  const subtotalText = formatINR(subtotal());
+  const body = `Hydra Bottles - Invoice\n-----------------------\n${lines.join('\n')}\n\nSubtotal: ${subtotalText}\n\nThank you for shopping with us.`;
+  const blob = new Blob([body], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'invoice.txt'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// init
+renderProducts();
+renderCart();
+updateCartCount();
+
+// event handlers
+document.getElementById('openCart').addEventListener('click', openCart);
+document.getElementById('closeCart').addEventListener('click', closeCart);
+document.getElementById('clearCartBtn').addEventListener('click', ()=>{
+  if(confirm('Clear cart?')) clearCart();
+});
+document.getElementById('checkoutBtn').addEventListener('click', checkout);
+document.getElementById('downloadInvoice').addEventListener('click', downloadInvoice);
+document.getElementById('closeModal').addEventListener('click', closeModal);
+
+// cart list controls (delegation)
+$('#cartDrawer').addEventListener('click', (e)=>{
+  const dec = e.target.getAttribute('data-dec');
+  const inc = e.target.getAttribute('data-inc');
+  const remove = e.target.getAttribute('data-remove');
+  if(dec) {
+    const cur = cart.find(i=>i.id===dec); if(cur) setQty(dec, cur.qty-1);
+  }
+  if(inc) {
+    const cur = cart.find(i=>i.id===inc); if(cur) setQty(inc, cur.qty+1);
+  }
+  if(remove) {
+    if(confirm('Remove item?')) { cart = cart.filter(i=>i.id!==remove); saveCart(); renderCart(); }
+  }
+});
+
+// close cart when clicking outside (small UX)
+window.addEventListener('click', (e)=>{
+  const drawer = document.getElementById('cartDrawer');
+  const openBtn = document.getElementById('openCart');
+  if(!drawer.contains(e.target) && !openBtn.contains(e.target) && drawer.classList.contains('open')){
+    closeCart();
+  }
+});
+
+// expose for debug (optional)
+window.HB = { addToCart, getCartDetails, subtotal, clearCart };
+
+</script>
+</body>
+</html>
